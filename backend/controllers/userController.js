@@ -40,11 +40,27 @@ const registerUser = async (req, res) => {
   }
 };
 // funcion para listar los usuarios
-const listUser = async (req, res) => {
+const listUserAdmin = async (req, res) => {
   // con la expresion regular le decimos que si en el req viene un parametro que lo use para filtrar la busqueda
   // con el populate().exec() le decimos que nos traiga en un subjson la relacion que tien con la coleccion role
   let users = await userModel
     .find({ name: new RegExp(req.params["name"]) })
+    .populate("role")
+    .exec();
+  if (users.length === 0)
+    return res.status(400).send({ message: "No search results" });
+
+  return res.status(200).send({ users });
+};
+
+// funcion para listar los usuarios activos
+const listUser = async (req, res) => {
+  // con la expresion regular le decimos que si en el req viene un parametro que lo use para filtrar la busqueda
+  // con el populate().exec() le decimos que nos traiga en un subjson la relacion que tien con la coleccion role
+  let users = await userModel
+    .find({
+      $and: [{ name: new RegExp(req.params["name"]) }, { dbStatus: "true" }],
+    })
     .populate("role")
     .exec();
   if (users.length === 0)
@@ -59,28 +75,82 @@ const login = async (req, res) => {
     return res.status(400).send({ message: "wrong email or password" });
 
   if (!userLogin.dbStatus)
-    return res.status(400).send({ message: "user no found" });
+    return res.status(400).send({ message: "wrong email or password" });
 
   const passHash = await bcrypt.compare(req.body.password, userLogin.password);
 
   if (!passHash)
     return res.status(400).send({ message: "wrong email or password" });
 
-    try {
-      return res.status(200).json({
-        token: jwt.sign(
-          {
-            _id: userLogin._id,
-            name: userLogin.name,
-            roleID: userLogin.role,
-            iat: moment().unix(),
-          },
-          process.env.SK_JWT
-        ),
-      });
-    } catch (e) {
-      return res.status(500).send({ message: "login error" });
-    }
+  try {
+    return res.status(200).json({
+      token: jwt.sign(
+        {
+          _id: userLogin._id,
+          name: userLogin.name,
+          roleID: userLogin.role,
+          iat: moment().unix(),
+        },
+        process.env.SK_JWT
+      ),
+    });
+  } catch (e) {
+    return res.status(500).send({ message: "login error" });
+  }
 };
 
-export default { registerUser, listUser, login };
+// const deleteUser = async (req, res) => {
+//   if (!req.params["_id"])
+//     return res.status(400).send({ message: "Incomplete data" });
+
+//   const users = await userModel.findByIdAndDelete(req.params["_id"]);
+
+//   return !users
+//     ? res.status(500).send({ message: "Error deleting user" })
+//     : res.status(200).send({ message: "User deleted" });
+// };
+
+const deleteUser = async (req, res) => {
+  if (!req.params["_id"])
+    return res.status(400).send({ message: "Incomplete data" });
+
+  const users = await userModel.findByIdAndUpdate(req.params["_id"], {
+    dbStatus: false,
+  });
+
+  return !users
+    ? res.status(500).send({ message: "Error deleting user" })
+    : res.status(200).send({ message: "User deleted" });
+};
+
+const updateUserAdmin = async (req, res) => {
+  if (!req.body._id || !req.body.name || !req.body.role || !req.body.email)
+    return res.status(400).send({ message: "Incomplete data" });
+
+  let pass = "";
+
+  if (!req.body.password) {
+    const findUser = await userModel.findOne({ email: req.body.email });
+    pass = findUser.password;
+  } else {
+    pass = await bcrypt.hash(req.body.password, 10);
+  }
+
+  const edituser = await userModel.findByIdAndUpdate(req.body._id, {
+    name: req.body.name,
+    password: pass,
+    role: req.body.role,
+  });
+
+  if (!edituser) return res.status(500).send({message: "Error editing user"});
+  return res.status(200).send({message: "user updated"});
+};
+
+export default {
+  registerUser,
+  listUser,
+  login,
+  deleteUser,
+  listUserAdmin,
+  updateUserAdmin,
+};

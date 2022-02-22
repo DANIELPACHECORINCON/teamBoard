@@ -17,5 +17,7 @@ router.post(
 // aca le decimo que en la url puede o no venir un parametro y que si viene que lo use en el listUser
 router.get("/listUser/:name?", userController.listUser);
 router.post("/login", userController.login);
+router.put("/deleteUser/:_id", userController.deleteUser);
+router.put("/updateUserAdmin", userController.updateUserAdmin);
 
 export default router;
